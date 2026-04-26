@@ -34,7 +34,6 @@ def load_my_model():
     except:
         return None
 
-# Modell laden (Hier war der Fehler!)
 model = load_my_model()
 
 def predict(image):
@@ -125,7 +124,8 @@ if st.session_state.active:
         st.rerun()
 
 mins, secs = divmod(int(max(0, st.session_state.remaining_sec)), 60)
-st.markdown(f<div class='timer-text'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+# KORRIGIERTE ZEILE:
+st.markdown(f"<div class='timer-text'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
 
 _, btn_center, _ = st.columns([0.6, 1, 0.6])
 with btn_center:
