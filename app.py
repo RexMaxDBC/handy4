@@ -4,8 +4,9 @@ from PIL import Image, ImageOps
 import numpy as np
 import time
 import os
+import streamlit.components.v1 as components
 
-# --- INITIALISIERUNG (MUSS VOR set_page_config SEIN!) ---
+# --- INITIALISIERUNG ---
 if "active" not in st.session_state:
     st.session_state.active = False
 if "remaining_sec" not in st.session_state:
@@ -18,218 +19,160 @@ if "cam_key" not in st.session_state:
     st.session_state.cam_key = 0
 if "tasks" not in st.session_state:
     st.session_state.tasks = {}
-if "selected_task" not in st.session_state:
-    st.session_state.selected_task = None
 if "last_tick" not in st.session_state:
     st.session_state.last_tick = time.time()
 
 st.set_page_config(page_title="Pomodoro Handy-Wächter", layout="centered")
 
-# --- KI SETUP - LADE H5 MODELL ---
+# --- KI SETUP ---
 @st.cache_resource
 def load_my_model():
     try:
-        # Prüfe ob die Datei existiert
         if os.path.exists("keras_model.h5"):
-            # Lade H5 Datei (NICHT saved_model)
-            model = tf.keras.models.load_model("keras_model.h5", compile=False)
-            st.success("✅ KI-Modell erfolgreich geladen!")
-            return model
-        else:
-            st.error("❌ Datei 'keras_model.h5' nicht gefunden!")
-            st.info("Stelle sicher, dass die Datei im gleichen Verzeichnis wie app.py liegt")
-            return None
-    except Exception as e:
-        st.error(f"❌ Fehler beim Laden des Modells: {e}")
+            return tf.keras.models.load_model("keras_model.h5", compile=False)
+        return None
+    except:
         return None
 
-# Modell laden
 model = load_my_model()
-
-# Lade Labels
-def load_labels():
-    try:
-        if os.path.exists("labels.txt"):
-            with open("labels.txt", "r") as f:
-                labels = [line.strip() for line in f.readlines()]
-            return labels
-        else:
-            return ["Ohne Handy", "Mit Handy"]
-    except:
-        return ["Ohne Handy", "Mit Handy"]
-
-labels = load_labels()
 
 def predict(image):
     if model is None:
         return 0, 0.0
-    
-    try:
-        # Bildvorbereitung für Teachable Machine Modell
-        size = (224, 224)
-        image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
-        image_array = np.asarray(image).astype(np.float32)
-        
-        # Normalisierung: Pixelwerte (0-255) auf Bereich (-1 bis 1)
-        normalized_image_array = (image_array / 127.5) - 1
-        data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
-        data[0] = normalized_image_array
-        
-        # Vorhersage
-        prediction = model.predict(data, verbose=0)
-        index = np.argmax(prediction)
-        confidence_score = prediction[0][index]
-        return index, confidence_score
-    except Exception as e:
-        st.warning(f"Fehler bei der Vorhersage: {e}")
-        return 0, 0.0
+    size = (224, 224)
+    image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
+    image_array = np.asarray(image).astype(np.float32)
+    normalized_image_array = (image_array / 127.5) - 1
+    data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
+    data[0] = normalized_image_array
+    prediction = model.predict(data, verbose=0)
+    index = np.argmax(prediction)
+    return index, prediction[0][index]
 
-# --- CSS DESIGN ---
+# --- CSS (Design der 1. Webseite) ---
 st.markdown(f"""
 <style>
-.stApp {{
-    background-color: {st.session_state.bg_color};
-    transition: background-color 0.6s ease;
-}}
-.timer-text {{
-    text-align: center;
-    font-size: 110px;
-    color: white;
-    font-weight: bold;
-    margin: 20px 0;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-}}
-div.stButton > button {{
-    border-radius: 8px;
-}}
+    .stApp {{
+        background-color: {st.session_state.bg_color};
+        transition: background-color 0.6s ease;
+    }}
+    .header-container {{
+        border: 2px solid #D3D3D3;
+        border-radius: 12px;
+        background-color: rgba(211, 211, 211, 0.15);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0 auto 40px auto;
+        padding: 15px;
+    }}
+    .title-text {{
+        color: white !important;
+        font-weight: bold !important;
+        font-size: 2.2rem !important;
+        margin: 0 !important;
+    }}
+    .timer-text {{
+        text-align: center;
+        font-size: 120px;
+        color: white;
+        font-weight: bold;
+        margin: 10px 0;
+    }}
+    .fixed-bottom {{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 15px;
+        z-index: 1000;
+        border-top: 1px solid #ddd;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🛡️ Handy-Wächter Pomodoro")
+# --- HEADER ---
+st.markdown("<div class='header-container'><h1 class='title-text'>Handy-Wächter</h1></div>", unsafe_allow_html=True)
 
 # --- MODUS AUSWAHL ---
 m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
-    if st.button("🍅 Pomodoro", use_container_width=True):
-        st.session_state.mode = "Pomodoro"
-        st.session_state.remaining_sec = 25 * 60
-        st.session_state.bg_color = "#2d5a27"
+    if st.button("Pomodoro", use_container_width=True):
+        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Pomodoro", 25*60, "#2d5a27"
         st.session_state.active = False
         st.rerun()
-
 with m_col2:
-    if st.button("☕ Kurze Pause", use_container_width=True):
-        st.session_state.mode = "Pause"
-        st.session_state.remaining_sec = 5 * 60
-        st.session_state.bg_color = "#457b9d"
+    if st.button("Kurze Pause", use_container_width=True):
+        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Pause", 5*60, "#457b9d"
         st.session_state.active = False
         st.rerun()
-
 with m_col3:
-    if st.button("😴 Lange Pause", use_container_width=True):
-        st.session_state.mode = "Lange Pause"
-        st.session_state.remaining_sec = 15 * 60
-        st.session_state.bg_color = "#457b9d"
+    if st.button("Lange Pause", use_container_width=True):
+        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Lange Pause", 15*60, "#457b9d"
         st.session_state.active = False
         st.rerun()
 
 # --- TIMER LOGIK ---
 if st.session_state.active:
     now = time.time()
-    elapsed = now - st.session_state.last_tick
-    st.session_state.remaining_sec -= elapsed
+    st.session_state.remaining_sec -= (now - st.session_state.last_tick)
     st.session_state.last_tick = now
-    
     if st.session_state.remaining_sec <= 0:
         st.session_state.active = False
-        st.session_state.remaining_sec = 0
         st.balloons()
-        st.success("🎉 Zeit vorbei! 🎉")
         st.rerun()
 
-# Timer anzeigen
 mins, secs = divmod(int(max(0, st.session_state.remaining_sec)), 60)
 st.markdown(f"<div class='timer-text'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
 
-# Start/Stop Button
 _, btn_center, _ = st.columns([0.5, 1, 0.5])
 with btn_center:
-    button_text = "⏸️ STOP" if st.session_state.active else "▶️ START"
-    if st.button(button_text, use_container_width=True):
+    if st.button("STOP" if st.session_state.active else "START", use_container_width=True):
         st.session_state.active = not st.session_state.active
         st.session_state.last_tick = time.time()
         st.rerun()
 
 # --- TASK SYSTEM ---
-st.markdown("---")
-with st.expander("📝 Lernfächer verwalten"):
+st.markdown("<br>", unsafe_allow_html=True)
+with st.expander("📝 Lern-Fächer verwalten"):
     c1, c2, c3 = st.columns([3, 1, 1])
-    with c1:
-        name = st.text_input("Neues Fach")
-    with c2:
-        target = st.number_input("Ziel (Minuten)", min_value=1, value=25)
-    with c3:
-        if st.button("➕ Hinzufügen", use_container_width=True):
-            if name and name not in st.session_state.tasks:
-                st.session_state.tasks[name] = {"done": 0, "target": target}
-                st.rerun()
+    name = c1.text_input("Name")
+    target = c2.number_input("Ziel", min_value=1, value=4)
+    if c3.button("Speichern"):
+        if name: st.session_state.tasks[name] = {"done": 0, "target": target}; st.rerun()
     
-    # Tasks anzeigen
-    if st.session_state.tasks:
-        st.write("**Aktuelle Fächer:**")
-        for task_name, task_data in st.session_state.tasks.items():
-            col1, col2, col3 = st.columns([3, 1, 1])
-            with col1:
-                st.write(f"📚 {task_name}")
-            with col2:
-                if task_data["target"] > 0:
-                    progress = min(task_data["done"] / task_data["target"], 1.0)
-                    st.progress(progress)
-                st.write(f"{task_data['done']}/{task_data['target']}")
-            with col3:
-                if st.button("+1", key=f"add_{task_name}"):
-                    if task_data["done"] < task_data["target"]:
-                        st.session_state.tasks[task_name]["done"] += 1
-                        st.rerun()
+    for t_name, t_data in st.session_state.tasks.items():
+        col1, col2, col3 = st.columns([3, 1, 1])
+        col1.write(f"📚 {t_name}")
+        col2.write(f"{t_data['done']}/{t_data['target']}")
+        if col3.button("+1", key=t_name):
+            st.session_state.tasks[t_name]["done"] += 1; st.rerun()
 
-# --- KI SCANNER (Nur im Pomodoro Modus) ---
+# --- KI & KAMERA (Unteres Panel) ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    st.markdown("---")
-    st.subheader("📸 Handy-Scanner")
-    st.caption("Das KI-Modell prüft, ob du auf dein Handy schaust")
+    # Automatisches Foto alle 5 Sek
+    components.html("<script>setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 5000);</script>", height=0)
     
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        img_file = st.camera_input("Kamera", key=f"camera_{st.session_state.cam_key}", label_visibility="collapsed")
-    
-    with col2:
-        if img_file and model is not None:
+    st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        img_file = st.camera_input("Scanner", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
+    with c2:
+        if img_file:
             img = Image.open(img_file)
             class_idx, confidence = predict(img)
-            
-            # Klasse 1 = "Mit Handy" (laut deiner labels.txt)
             if class_idx == 1 and confidence > 0.7:
-                st.session_state.bg_color = "#ba4949"  # Rot
-                st.error(f"⚠️ HANDY ERKANNT! ({confidence:.0%})")
-                st.markdown("**📵 Leg bitte das Handy weg!**")
+                st.session_state.bg_color = "#ba4949"
+                st.error("HANDY ERKANNT!")
             else:
-                st.session_state.bg_color = "#2d5a27"  # Grün
-                st.success(f"✅ Gut gemacht! Kein Handy erkannt ({confidence:.0%})")
-            
-            # Zeige erkannte Klasse an
-            st.write(f"Erkannt: {labels[class_idx] if class_idx < len(labels) else 'Unbekannt'}")
-            
-            # Kleines Vorschaubild
-            st.image(img, width=100)
-            
-            # Nächsten Scan auslösen
+                st.session_state.bg_color = "#2d5a27"
+                st.success("FOKUSSIERT")
             st.session_state.cam_key += 1
-            time.sleep(1)
+            time.sleep(0.5)
             st.rerun()
-        elif img_file and model is None:
-            st.error("KI-Modell nicht geladen. Kann nicht scannen.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Automatisches Neuladen für Timer
 if st.session_state.active:
-    time.sleep(0.5)
+    time.sleep(0.1)
     st.rerun()
