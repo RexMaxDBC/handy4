@@ -24,11 +24,10 @@ if "last_tick" not in st.session_state:
 
 st.set_page_config(page_title="Handy-Wächter", layout="centered")
 
-# --- KI SETUP (Dein eigenes Modell) ---
+# --- KI SETUP ---
 @st.cache_resource
 def load_my_model():
     try:
-        # Lädt die h5 Datei direkt aus dem Hauptverzeichnis
         if os.path.exists("keras_model.h5"):
             return tf.keras.models.load_model("keras_model.h5", compile=False)
         return None
@@ -40,30 +39,18 @@ model = load_my_model()
 def predict(image):
     if model is None:
         return 0, 0.0
-    
-    # 1. Bild auf die richtige Größe bringen (224x224)
     size = (224, 224)
     image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
-    
-    # 2. Bild in ein mathematisches Array umwandeln
     image_array = np.asarray(image).astype(np.float32)
-    
-    # 3. Normalisierung (Ganz wichtig für Teachable Machine!)
-    # Verwandelt Pixelwerte von 0-255 in den Bereich -1 bis 1
     normalized_image_array = (image_array / 127.5) - 1
-    
-    # 4. In das richtige Format für die KI bringen
     data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
     data[0] = normalized_image_array
-    
-    # 5. Vorhersage berechnen
     prediction = model.predict(data, verbose=0)
     index = np.argmax(prediction)
     confidence = prediction[0][index]
-    
     return index, confidence
 
-# --- CSS DESIGN (Angelehnt an deine 1. Webseite) ---
+# --- CSS DESIGN ---
 st.markdown(f"""
 <style>
     .stApp {{
@@ -137,11 +124,9 @@ if st.session_state.active:
         st.balloons()
         st.rerun()
 
-# Timer Anzeige
 mins, secs = divmod(int(max(0, st.session_state.remaining_sec)), 60)
 st.markdown(f"<div class='timer-text'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
 
-# Start/Stop Button
 _, btn_center, _ = st.columns([0.6, 1, 0.6])
 with btn_center:
     if st.button("STOP" if st.session_state.active else "START", use_container_width=True):
@@ -168,34 +153,35 @@ with st.expander("📝 Lernfächer verwalten"):
             st.session_state.tasks[t_name]["done"] += 1
             st.rerun()
 
-# --- KI SCANNER (Das untere Panel) ---
+# --- KI SCANNER ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # Klickt alle 5 Sekunden auf "Photo"
-    components.html("<script>setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 5000);</script>", height=0)
+    # Automatischer Foto-Trigger alle 6 Sekunden (etwas langsamer für Stabilität)
+    components.html("<script>if(window.parent.photoInterval) clearInterval(window.parent.photoInterval); window.parent.photoInterval = setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 6000);</script>", height=0)
     
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
+        # cam_key sorgt dafür, dass das Kamera-Widget jedes Mal "frisch" geladen wird
         img_file = st.camera_input("Handy-Check", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
         if img_file:
             img = Image.open(img_file)
             idx, conf = predict(img)
             
-            # SCHWELLENWERT ERHÖHT: 0.92 = 92% Sicherheit nötig
-            if idx == 1 and conf > 0.92:
+            if idx == 1 and conf > 0.85:
                 st.session_state.bg_color = "#ba4949" # Rot
-                st.error(f"HANDY GEFUNDEN! ({conf:.0%})")
+                st.error(f"HANDY! ({conf:.0%})")
             else:
                 st.session_state.bg_color = "#2d5a27" # Grün
-                st.success(f"KONZENTRIERT ({conf:.0%})")
+                st.success(f"OK ({conf:.0%})")
             
+            # WICHTIG: Erst nach Verarbeitung den Key erhöhen und pausieren
             st.session_state.cam_key += 1
-            time.sleep(0.5)
+            time.sleep(1.5) # Dem Browser Zeit geben
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Automatisches Update für den Timer
+# Timer-Update im Hintergrund
 if st.session_state.active:
-    time.sleep(0.1)
+    time.sleep(0.5)
     st.rerun()
