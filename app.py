@@ -155,29 +155,28 @@ with st.expander("📝 Lernfächer verwalten"):
 
 # --- KI SCANNER ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # Automatischer Foto-Trigger alle 6 Sekunden (etwas langsamer für Stabilität)
+    # Automatischer Foto-Trigger alle 6 Sekunden
     components.html("<script>if(window.parent.photoInterval) clearInterval(window.parent.photoInterval); window.parent.photoInterval = setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 6000);</script>", height=0)
     
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
-        # cam_key sorgt dafür, dass das Kamera-Widget jedes Mal "frisch" geladen wird
         img_file = st.camera_input("Handy-Check", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
         if img_file:
             img = Image.open(img_file)
             idx, conf = predict(img)
             
-            if idx == 1 and conf > 0.85:
+            # NEUER THRESHOLD: 0.95 (95% Sicherheit erforderlich)
+            if idx == 1 and conf > 0.95:
                 st.session_state.bg_color = "#ba4949" # Rot
                 st.error(f"HANDY! ({conf:.0%})")
             else:
                 st.session_state.bg_color = "#2d5a27" # Grün
                 st.success(f"OK ({conf:.0%})")
             
-            # WICHTIG: Erst nach Verarbeitung den Key erhöhen und pausieren
             st.session_state.cam_key += 1
-            time.sleep(1.5) # Dem Browser Zeit geben
+            time.sleep(1.5) 
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
