@@ -55,7 +55,7 @@ st.markdown(f"""
 <style>
     .stApp {{
         background-color: {st.session_state.bg_color};
-        transition: background-color 0.4s ease;
+        transition: background-color 0.8s ease;
     }}
     .header-container {{
         border: 2px solid #D3D3D3;
@@ -78,6 +78,7 @@ st.markdown(f"""
         color: white;
         font-weight: bold;
         margin: 10px 0;
+        line-height: 1;
     }}
     .fixed-bottom {{
         position: fixed;
@@ -124,7 +125,6 @@ if st.session_state.active:
         st.rerun()
 
 mins, secs = divmod(int(max(0, st.session_state.remaining_sec)), 60)
-# KORRIGIERTE ZEILE:
 st.markdown(f"<div class='timer-text'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
 
 _, btn_center, _ = st.columns([0.6, 1, 0.6])
@@ -138,12 +138,13 @@ with btn_center:
 st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("📝 Lernfächer verwalten"):
     c1, c2, c3 = st.columns([3, 1, 1])
-    name = c1.text_input("Name")
+    name = c1.text_input("Fach Name")
     target = c2.number_input("Ziel", min_value=1, value=4)
-    if c3.button("Add"):
+    if c3.button("Speichern"):
         if name:
             st.session_state.tasks[name] = {"done": 0, "target": target}
             st.rerun()
+    
     for t_name, t_data in st.session_state.tasks.items():
         col1, col2, col3 = st.columns([3, 1, 1])
         col1.write(f"📚 {t_name}")
@@ -152,30 +153,35 @@ with st.expander("📝 Lernfächer verwalten"):
             st.session_state.tasks[t_name]["done"] += 1
             st.rerun()
 
-# --- SCANNER ---
+# --- KI SCANNER ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # Automatischer Foto-Trigger alle 5 Sekunden
-    components.html("<script>setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 5000);</script>", height=0)
+    # Automatischer Foto-Trigger alle 6 Sekunden (etwas langsamer für Stabilität)
+    components.html("<script>if(window.parent.photoInterval) clearInterval(window.parent.photoInterval); window.parent.photoInterval = setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 6000);</script>", height=0)
     
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
-        img_file = st.camera_input("Check", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
+        # cam_key sorgt dafür, dass das Kamera-Widget jedes Mal "frisch" geladen wird
+        img_file = st.camera_input("Handy-Check", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
         if img_file:
             img = Image.open(img_file)
             idx, conf = predict(img)
-            # 0.85 ist ein guter Schwellenwert
+            
             if idx == 1 and conf > 0.85:
-                st.session_state.bg_color = "#ba4949"
+                st.session_state.bg_color = "#ba4949" # Rot
                 st.error(f"HANDY! ({conf:.0%})")
             else:
-                st.session_state.bg_color = "#2d5a27"
+                st.session_state.bg_color = "#2d5a27" # Grün
                 st.success(f"OK ({conf:.0%})")
+            
+            # WICHTIG: Erst nach Verarbeitung den Key erhöhen und pausieren
             st.session_state.cam_key += 1
+            time.sleep(1.5) # Dem Browser Zeit geben
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
+# Timer-Update im Hintergrund
 if st.session_state.active:
-    time.sleep(0.1)
+    time.sleep(0.5)
     st.rerun()
