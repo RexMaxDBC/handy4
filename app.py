@@ -23,7 +23,7 @@ if "tasks" not in st.session_state:
 if "last_tick" not in st.session_state:
     st.session_state.last_tick = time.time()
 
-st.set_page_config(page_title="Handy-Wächter Pro", layout="wide") # 'wide' hilft, links Platz zu schaffen
+st.set_page_config(page_title="Handy-Wächter Pro", layout="wide")
 
 # --- HINTERGRUNDBILD LADEN ---
 @st.cache_data
@@ -86,51 +86,66 @@ def predict(image):
     confidence = prediction[0][index]
     return index, confidence
 
-# --- CSS DESIGN (Optimiert für Sichtbarkeit des Bildes) ---
-bg_img_css = ""
+# --- CSS DESIGN (Tomate im Vordergrund) ---
 if bg_img_base64:
-    bg_img_css = f"""
-        background-image: url("data:image/jpg;base64,{bg_img_base64}");
-        background-repeat: no-repeat;
-        background-position: left center;
-        background-size: 30%; /* Bild nimmt 30% der Breite ein */
-        background-attachment: fixed;
-    """
-
-st.markdown(f"""
-<style>
+    # Hier setzen wir das Bild als oberste Schicht im Hintergrund fest
+    bg_style = f"""
+    <style>
     .stApp {{
         background-color: {st.session_state.bg_color};
-        {bg_img_css}
         transition: background-color 0.8s ease;
     }}
-    /* Hauptcontainer etwas nach rechts schieben, damit links Platz für das Bild ist */
+    
+    /* Wir erstellen ein Pseudoelement für das Bild, um es vor die Farbe zu legen */
+    .stApp::before {{
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 40%; /* Breite des Bildbereichs */
+        height: 100%;
+        background-image: url("data:image/jpg;base64,{bg_img_base64}");
+        background-repeat: no-repeat;
+        background-size: contain;
+        background-position: left center;
+        z-index: 0;
+    }}
+
+    /* Sicherstellen, dass der Inhalt über dem Bild schwebt */
     .main .block-container {{
-        max-width: 600px;
-        margin-left: 35%; 
+        position: relative;
+        z-index: 10;
+        max-width: 650px;
+        margin-left: 45% !important; /* Verschiebt die App nach rechts weg von der Tomate */
+        background-color: rgba(255, 255, 255, 0.1); /* Leicht transparentes Glas-Design */
+        padding: 2rem;
+        border-radius: 20px;
     }}
-    .header-container {{
-        border: 2px solid rgba(255,255,255,0.3);
-        border-radius: 12px;
-        background-color: rgba(255, 255, 255, 0.1);
-        padding: 10px;
-        margin-bottom: 20px;
-        text-align: center;
-    }}
-    .title-text {{ color: white; font-weight: bold; font-size: 2rem; }}
+    
     .timer-text {{
         text-align: center; font-size: 100px; color: white;
-        font-weight: bold; margin: 10px 0;
+        font-weight: bold; margin: 10px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
     }}
+    
+    .header-container {{
+        text-align: center; margin-bottom: 20px;
+    }}
+    
+    .title-text {{ color: white; font-weight: bold; font-size: 2.5rem; }}
+
     .fixed-bottom {{
         position: fixed; bottom: 0; left: 0; width: 100%;
-        background-color: rgba(255,255,255,0.9); padding: 15px; z-index: 1000;
+        background-color: white; padding: 15px; z-index: 1000;
         border-top: 1px solid #ddd;
     }}
-</style>
-""", unsafe_allow_html=True)
+    </style>
+    """
+else:
+    bg_style = f"<style>.stApp {{ background-color: {st.session_state.bg_color}; }}</style>"
 
-# --- UI ---
+st.markdown(bg_style, unsafe_allow_html=True)
+
+# --- UI INHALT ---
 st.markdown("<div class='header-container'><h1 class='title-text'>Handy-Wächter Pro</h1></div>", unsafe_allow_html=True)
 
 cols = st.columns(3)
@@ -159,21 +174,23 @@ if btn_c.button("STOP" if st.session_state.active else "START", use_container_wi
     st.session_state.last_tick = time.time()
     st.rerun()
 
-with st.expander("📝 Aufgaben"):
+# --- Aufgaben Bereich ---
+st.write("---")
+with st.expander("📝 Deine Aufgaben"):
     c1, c2 = st.columns([3, 1])
-    n = c1.text_input("Neues Fach")
-    if c2.button("Add") and n:
+    n = c1.text_input("Neues Fach hinzufügen")
+    if c2.button("Hinzufügen") and n:
         st.session_state.tasks[n] = {"done": 0, "target": 4}
         st.rerun()
     for tn, td in st.session_state.tasks.items():
         col1, col2, col3 = st.columns([3, 1, 1])
-        col1.write(tn)
+        col1.write(f"📚 {tn}")
         col2.write(f"{td['done']}/4")
         if col3.button("+1", key=tn):
             st.session_state.tasks[tn]["done"] += 1
             st.rerun()
 
-# --- KI SCANNER ---
+# --- KI SCANNER (Untere Leiste) ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
     components.html("<script>if(window.parent.pI) clearInterval(window.parent.pI); window.parent.pI = setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 6000);</script>", height=0)
     
@@ -187,11 +204,11 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
             idx, conf = predict(img)
             if idx == 1 and conf > 0.95:
                 st.session_state.bg_color = "#ba4949"
-                st.error("HANDY!")
+                st.error("HANDY ERKANNT!")
                 play_alarm()
             else:
                 st.session_state.bg_color = "#2d5a27"
-                st.success("OK")
+                st.success("FOKUS OK")
                 stop_alarm()
             st.session_state.cam_key += 1
             time.sleep(1.2)
