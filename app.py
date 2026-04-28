@@ -23,7 +23,7 @@ if "tasks" not in st.session_state:
 if "last_tick" not in st.session_state:
     st.session_state.last_tick = time.time()
 
-st.set_page_config(page_title="Handy-Wächter Pro", layout="centered")
+st.set_page_config(page_title="Handy-Wächter Pro", layout="wide") # 'wide' hilft, links Platz zu schaffen
 
 # --- HINTERGRUNDBILD LADEN ---
 @st.cache_data
@@ -74,8 +74,7 @@ def load_my_model():
 model = load_my_model()
 
 def predict(image):
-    if model is None:
-        return 0, 0.0
+    if model is None: return 0, 0.0
     size = (224, 224)
     image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
     image_array = np.asarray(image).astype(np.float32)
@@ -87,15 +86,15 @@ def predict(image):
     confidence = prediction[0][index]
     return index, confidence
 
-# --- CSS DESIGN ---
+# --- CSS DESIGN (Optimiert für Sichtbarkeit des Bildes) ---
 bg_img_css = ""
 if bg_img_base64:
     bg_img_css = f"""
         background-image: url("data:image/jpg;base64,{bg_img_base64}");
         background-repeat: no-repeat;
         background-position: left center;
+        background-size: 30%; /* Bild nimmt 30% der Breite ein */
         background-attachment: fixed;
-        background-size: contain;
     """
 
 st.markdown(f"""
@@ -105,54 +104,40 @@ st.markdown(f"""
         {bg_img_css}
         transition: background-color 0.8s ease;
     }}
-    .stApp::before {{
-        content: "";
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background-color: rgba(0,0,0,0.1);
-        z-index: -1;
+    /* Hauptcontainer etwas nach rechts schieben, damit links Platz für das Bild ist */
+    .main .block-container {{
+        max-width: 600px;
+        margin-left: 35%; 
     }}
     .header-container {{
-        border: 2px solid #D3D3D3;
+        border: 2px solid rgba(255,255,255,0.3);
         border-radius: 12px;
-        background-color: rgba(211, 211, 211, 0.15);
-        display: flex;
-        justify-content: center;
+        background-color: rgba(255, 255, 255, 0.1);
         padding: 10px;
-        margin-bottom: 30px;
+        margin-bottom: 20px;
+        text-align: center;
     }}
-    .title-text {{
-        color: white; font-weight: bold; font-size: 2.2rem; margin: 0;
-    }}
+    .title-text {{ color: white; font-weight: bold; font-size: 2rem; }}
     .timer-text {{
-        text-align: center; font-size: 110px; color: white;
-        font-weight: bold; margin: 10px 0; line-height: 1;
+        text-align: center; font-size: 100px; color: white;
+        font-weight: bold; margin: 10px 0;
     }}
     .fixed-bottom {{
         position: fixed; bottom: 0; left: 0; width: 100%;
-        background-color: white; padding: 15px; z-index: 1000;
+        background-color: rgba(255,255,255,0.9); padding: 15px; z-index: 1000;
         border-top: 1px solid #ddd;
     }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- UI ELEMENTE ---
+# --- UI ---
 st.markdown("<div class='header-container'><h1 class='title-text'>Handy-Wächter Pro</h1></div>", unsafe_allow_html=True)
 
-m_col1, m_col2, m_col3 = st.columns(3)
-with m_col1:
-    if st.button("Pomodoro", use_container_width=True):
-        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Pomodoro", 25*60, "#2d5a27"
-        st.session_state.active = False
-        st.rerun()
-with m_col2:
-    if st.button("Kurze Pause", use_container_width=True):
-        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Pause", 5*60, "#457b9d"
-        st.session_state.active = False
-        st.rerun()
-with m_col3:
-    if st.button("Lange Pause", use_container_width=True):
-        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Lange Pause", 15*60, "#457b9d"
+cols = st.columns(3)
+modes = [("Pomodoro", 25*60, "#2d5a27"), ("Pause", 5*60, "#457b9d"), ("Lange Pause", 15*60, "#457b9d")]
+for i, (name, sec, color) in enumerate(modes):
+    if cols[i].button(name, use_container_width=True):
+        st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = name, sec, color
         st.session_state.active = False
         st.rerun()
 
@@ -168,28 +153,24 @@ if st.session_state.active:
 mins, secs = divmod(int(max(0, st.session_state.remaining_sec)), 60)
 st.markdown(f"<div class='timer-text'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
 
-_, btn_center, _ = st.columns([0.6, 1, 0.6])
-with btn_center:
-    if st.button("STOP" if st.session_state.active else "START", use_container_width=True):
-        st.session_state.active = not st.session_state.active
-        st.session_state.last_tick = time.time()
-        st.rerun()
+_, btn_c, _ = st.columns([0.5, 1, 0.5])
+if btn_c.button("STOP" if st.session_state.active else "START", use_container_width=True):
+    st.session_state.active = not st.session_state.active
+    st.session_state.last_tick = time.time()
+    st.rerun()
 
-# --- TASKS ---
-st.markdown("<br>", unsafe_allow_html=True)
-with st.expander("📝 Lernfächer"):
-    c1, c2, c3 = st.columns([3, 1, 1])
-    name = c1.text_input("Fach")
-    target = c2.number_input("Ziel", min_value=1, value=4)
-    if c3.button("Add") and name:
-        st.session_state.tasks[name] = {"done": 0, "target": target}
+with st.expander("📝 Aufgaben"):
+    c1, c2 = st.columns([3, 1])
+    n = c1.text_input("Neues Fach")
+    if c2.button("Add") and n:
+        st.session_state.tasks[n] = {"done": 0, "target": 4}
         st.rerun()
-    for t_name, t_data in st.session_state.tasks.items():
+    for tn, td in st.session_state.tasks.items():
         col1, col2, col3 = st.columns([3, 1, 1])
-        col1.write(f"📚 {t_name}")
-        col2.write(f"{t_data['done']}/{t_data['target']}")
-        if col3.button("+1", key=t_name):
-            st.session_state.tasks[t_name]["done"] += 1
+        col1.write(tn)
+        col2.write(f"{td['done']}/4")
+        if col3.button("+1", key=tn):
+            st.session_state.tasks[tn]["done"] += 1
             st.rerun()
 
 # --- KI SCANNER ---
@@ -199,14 +180,14 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
-        img_file = st.camera_input("Check", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
+        img_f = st.camera_input("Scanner", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
-        if img_file:
-            img = Image.open(img_file)
+        if img_f:
+            img = Image.open(img_f)
             idx, conf = predict(img)
             if idx == 1 and conf > 0.95:
                 st.session_state.bg_color = "#ba4949"
-                st.error("ALARM!")
+                st.error("HANDY!")
                 play_alarm()
             else:
                 st.session_state.bg_color = "#2d5a27"
