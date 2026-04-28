@@ -25,19 +25,33 @@ if "last_tick" not in st.session_state:
 
 st.set_page_config(page_title="Handy-Wächter", layout="centered")
 
-# --- SOUND FUNKTION ---
+# --- SOUND FUNKTIONEN (Start & Stopp) ---
 def play_alarm():
     if os.path.exists("batle-alarm-star-wars.mp3"):
         with open("batle-alarm-star-wars.mp3", "rb") as f:
             data = f.read()
             b64 = base64.b64encode(data).decode()
-            # Erzeugt ein unsichtbares Audio-Element, das sofort abspielt
+            # Audio mit der ID "alarm_sound"
             md = f"""
-                <audio autoplay>
+                <audio id="alarm_sound" autoplay>
                 <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
                 </audio>
                 """
             st.markdown(md, unsafe_allow_html=True)
+
+def stop_alarm():
+    # Kleines JavaScript, um das Audio-Element mit der ID "alarm_sound" zu stoppen
+    stop_js = """
+        <script>
+        var audio = window.parent.document.getElementById("alarm_sound");
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.remove();
+        }
+        </script>
+        """
+    components.html(stop_js, height=0)
 
 # --- KI SETUP ---
 @st.cache_resource
@@ -183,11 +197,12 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
             
             if idx == 1 and conf > 0.95:
                 st.session_state.bg_color = "#ba4949" # Rot
-                st.error(f"ALARM! HANDY ERKANNT! ({conf:.0%})")
-                play_alarm() # HIER WIRD DER SOUND AUSGELÖST
+                st.error(f"ALARM! ({conf:.0%})")
+                play_alarm()
             else:
                 st.session_state.bg_color = "#2d5a27" # Grün
                 st.success(f"Fokus okay ({conf:.0%})")
+                stop_alarm() # HIER WIRD DER SOUND GESTOPPT
             
             st.session_state.cam_key += 1
             time.sleep(1.5) 
