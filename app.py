@@ -5,6 +5,7 @@ import numpy as np
 import time
 import os
 import streamlit.components.v1 as components
+import base64
 
 # --- INITIALISIERUNG ---
 if "active" not in st.session_state:
@@ -23,6 +24,20 @@ if "last_tick" not in st.session_state:
     st.session_state.last_tick = time.time()
 
 st.set_page_config(page_title="Handy-Wächter", layout="centered")
+
+# --- SOUND FUNKTION ---
+def play_alarm():
+    if os.path.exists("batle-alarm-star-wars.mp3"):
+        with open("batle-alarm-star-wars.mp3", "rb") as f:
+            data = f.read()
+            b64 = base64.b64encode(data).decode()
+            # Erzeugt ein unsichtbares Audio-Element, das sofort abspielt
+            md = f"""
+                <audio autoplay>
+                <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+                </audio>
+                """
+            st.markdown(md, unsafe_allow_html=True)
 
 # --- KI SETUP ---
 @st.cache_resource
@@ -155,7 +170,6 @@ with st.expander("📝 Lernfächer verwalten"):
 
 # --- KI SCANNER ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # Automatischer Foto-Trigger alle 6 Sekunden
     components.html("<script>if(window.parent.photoInterval) clearInterval(window.parent.photoInterval); window.parent.photoInterval = setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 6000);</script>", height=0)
     
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
@@ -167,20 +181,19 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
             img = Image.open(img_file)
             idx, conf = predict(img)
             
-            # NEUER THRESHOLD: 0.95 (95% Sicherheit erforderlich)
             if idx == 1 and conf > 0.95:
                 st.session_state.bg_color = "#ba4949" # Rot
-                st.error(f"HANDY! ({conf:.0%})")
+                st.error(f"ALARM! HANDY ERKANNT! ({conf:.0%})")
+                play_alarm() # HIER WIRD DER SOUND AUSGELÖST
             else:
                 st.session_state.bg_color = "#2d5a27" # Grün
-                st.success(f"OK ({conf:.0%})")
+                st.success(f"Fokus okay ({conf:.0%})")
             
             st.session_state.cam_key += 1
             time.sleep(1.5) 
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Timer-Update im Hintergrund
 if st.session_state.active:
     time.sleep(0.5)
     st.rerun()
