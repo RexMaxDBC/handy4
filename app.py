@@ -7,7 +7,7 @@ import os
 import base64
 import streamlit.components.v1 as components
 
-# --- KI SETUP (Dein selbsttrainiertes Modell) ---
+# --- KI SETUP (Selbsttrainiertes Modell) ---
 @st.cache_resource
 def load_my_model():
     return tf.keras.models.load_model("keras_model.h5", compile=False)
@@ -83,7 +83,7 @@ st.markdown(f"""
     .timer-text {{ text-align: center; font-size: 120px; color: white; font-weight: bold; margin: 10px 0; }}
     
     .active-task-box {{
-        background: rgba(255, 255, 255, 0.25); border: 2px solid white;
+        background: rgba(255, 255, 255, 0.35); border: 3px solid white;
         border-radius: 10px; padding: 20px; margin-bottom: 15px; color: white;
     }}
     .inactive-task-box {{
@@ -115,7 +115,7 @@ with m_col3:
         st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Lange Pause", 15*60, "#457b9d"
         st.session_state.active = False
 
-# --- TIMER ---
+# --- TIMER LOGIK ---
 if st.session_state.active:
     now = time.time()
     st.session_state.remaining_sec -= (now - st.session_state.last_tick)
@@ -139,12 +139,21 @@ with btn_center:
             stop_alarm()
         st.rerun()
 
-# --- DASHBOARD ---
+# --- DASHBOARD & AUSWAHL AUFHEBEN ---
 st.markdown("<hr style='opacity: 0.2'>", unsafe_allow_html=True)
+
+if st.session_state.selected_task:
+    st.markdown(f"<div style='text-align: center; color: white; margin-bottom: 10px;'>🎯 Aktueller Fokus: <b>{st.session_state.selected_task}</b></div>", unsafe_allow_html=True)
+    if st.button("❌ Auswahl aufheben", use_container_width=True):
+        st.session_state.selected_task = None
+        st.rerun()
+else:
+    st.markdown("<div style='text-align: center; color: white; opacity: 0.7; margin-bottom: 10px;'>✨ Kein Fach ausgewählt - Freies Lernen</div>", unsafe_allow_html=True)
+
 with st.expander("➕ Neues Lern-Fach hinzufügen"):
     c1, c2, c3 = st.columns([3, 1, 1])
-    new_name = c1.text_input("Name")
-    new_target = c2.number_input("Ziel", min_value=1, value=4)
+    new_name = c1.text_input("Name des Fachs")
+    new_target = c2.number_input("Ziel-Sessions", min_value=1, value=4)
     if c3.button("Speichern"):
         if new_name:
             st.session_state.tasks[new_name] = {"done": 0, "target": new_target}
@@ -155,7 +164,18 @@ if st.session_state.tasks:
         is_active = (st.session_state.selected_task == t_name)
         css = "active-task-box" if is_active else "inactive-task-box"
         progress = min(100, int((t_data["done"] / t_data["target"]) * 100))
-        st.markdown(f"<div class='{css}'><b>{t_name}</b> | {t_data['done']}/{t_data['target']} Sessions<br><div style='background:rgba(0,0,0,0.2);height:8px;border-radius:4px;margin-top:8px;'><div style='background:white;width:{progress}%;height:100%;border-radius:4px;'></div></div></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class='{css}'>
+                <div style='display: flex; justify-content: space-between;'>
+                    <b>{t_name}</b>
+                    <span>{t_data['done']}/{t_data['target']} Sessions</span>
+                </div>
+                <div style='background:rgba(0,0,0,0.2);height:8px;border-radius:4px;margin-top:8px;'>
+                    <div style='background:white;width:{progress}%;height:100%;border-radius:4px;'></div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         cs, cd, _ = st.columns([0.25, 0.25, 0.5])
         if not is_active:
             if cs.button("Start", key=f"s_{t_name}"):
