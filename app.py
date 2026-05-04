@@ -7,7 +7,7 @@ import os
 import base64
 import streamlit.components.v1 as components
 
-# --- KI SETUP (Selbsttrainiertes Modell) ---
+# --- KI SETUP ---
 @st.cache_resource
 def load_my_model():
     return tf.keras.models.load_model("keras_model.h5", compile=False)
@@ -41,7 +41,7 @@ if "selected_task" not in st.session_state:
 
 st.set_page_config(page_title="Pomodoro Wächter Pro", layout="centered")
 
-# --- SOUND FUNKTIONEN ---
+# --- SOUND LOGIK ---
 def play_alarm():
     if os.path.exists("batle-alarm-star-wars.mp3"):
         with open("batle-alarm-star-wars.mp3", "rb") as f:
@@ -70,37 +70,20 @@ def stop_alarm():
 # --- CSS DESIGN ---
 st.markdown(f"""
 <style>
-    .stApp {{
-        background-color: {st.session_state.bg_color};
-        transition: background-color 0.8s ease;
-    }}
-    .header-container {{
-        border: 2px solid #D3D3D3; border-radius: 12px;
-        background-color: rgba(211, 211, 211, 0.15);
-        display: flex; justify-content: center; padding: 15px; margin-bottom: 30px;
-    }}
+    .stApp {{ background-color: {st.session_state.bg_color}; transition: background-color 0.8s ease; }}
+    .header-container {{ border: 2px solid #D3D3D3; border-radius: 12px; background-color: rgba(211, 211, 211, 0.15); display: flex; justify-content: center; padding: 15px; margin-bottom: 30px; }}
     .title-text {{ color: white; font-weight: bold; font-size: 2.2rem; margin: 0; }}
     .timer-text {{ text-align: center; font-size: 110px; color: white; font-weight: bold; margin: 10px 0; }}
-    
-    .active-task-box {{
-        background: rgba(255, 255, 255, 0.35); border: 3px solid white;
-        border-radius: 10px; padding: 20px; margin-bottom: 15px; color: white;
-    }}
-    .inactive-task-box {{
-        background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 10px; padding: 20px; margin-bottom: 15px; color: rgba(255, 255, 255, 0.8);
-    }}
-    .fixed-bottom {{
-        position: fixed; bottom: 0; left: 0; width: 100%;
-        background-color: white; padding: 15px; z-index: 1000; border-top: 1px solid #ddd;
-    }}
+    .active-task-box {{ background: rgba(255, 255, 255, 0.35); border: 3px solid white; border-radius: 10px; padding: 20px; margin-bottom: 15px; color: white; }}
+    .inactive-task-box {{ background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; padding: 20px; margin-bottom: 15px; color: rgba(255, 255, 255, 0.8); }}
+    .fixed-bottom {{ position: fixed; bottom: 0; left: 0; width: 100%; background-color: white; padding: 15px; z-index: 1000; border-top: 1px solid #ddd; }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- UI HEADER ---
+# --- UI ---
 st.markdown("<div class='header-container'><h1 class='title-text'>Pomodoro Wächter Pro</h1></div>", unsafe_allow_html=True)
 
-# --- MODUS ---
+# MODUS AUSWAHL
 m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
     if st.button("Pomodoro", use_container_width=True):
@@ -115,7 +98,7 @@ with m_col3:
         st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Lange Pause", 15*60, "#457b9d"
         st.session_state.active = False
 
-# --- TIMER ---
+# TIMER
 if st.session_state.active:
     now = time.time()
     st.session_state.remaining_sec -= (now - st.session_state.last_tick)
@@ -135,11 +118,10 @@ with btn_center:
     if st.button("STOP" if st.session_state.active else "START", use_container_width=True):
         st.session_state.active = not st.session_state.active
         st.session_state.last_tick = time.time()
-        if not st.session_state.active: 
-            stop_alarm()
+        if not st.session_state.active: stop_alarm()
         st.rerun()
 
-# --- DASHBOARD ---
+# --- TASK DASHBOARD ---
 st.markdown("<hr style='opacity: 0.2'>", unsafe_allow_html=True)
 if st.session_state.selected_task:
     st.markdown(f"<div style='text-align: center; color: white; margin-bottom: 10px;'>🎯 Fokus: <b>{st.session_state.selected_task}</b></div>", unsafe_allow_html=True)
@@ -171,23 +153,16 @@ if st.session_state.tasks:
             if st.session_state.selected_task == t_name: st.session_state.selected_task = None
             st.rerun()
 
-# --- KI WÄCHTER (ULTRA STABIL) ---
+# --- KI SCANNER (ROBUSTE VERSION) ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # 1. JS Trigger, der erst prüft, ob das alte Foto weg ist, bevor er neu klickt
+    # JS: Klickt nur, wenn kein Bild da ist. Das verhindert das Aufhängen.
     trigger_js = """
     <script>
-    if(!window.photoInterval) {
-        window.photoInterval = setInterval(() => {
-            const clearBtn = Array.from(window.parent.document.querySelectorAll('button'))
-                             .find(x => x.innerText.includes('Clear Photo'));
-            if(clearBtn) {
-                clearBtn.click(); // Erst altes Foto löschen
-            } else {
-                const takeBtn = Array.from(window.parent.document.querySelectorAll('button'))
-                                .find(x => x.innerText.includes('Take Photo'));
-                if(takeBtn) takeBtn.click(); // Dann neues Foto machen
-            }
-        }, 5000); 
+    if(!window.pInterval) {
+        window.pInterval = setInterval(() => {
+            const takeBtn = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Take Photo'));
+            if(takeBtn) takeBtn.click();
+        }, 5000);
     }
     </script>
     """
@@ -196,7 +171,8 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
-        img_file = st.camera_input("Scanner", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
+        # Einzigartiger Key pro Scan erzwingt das Leeren des alten Bildes
+        img_file = st.camera_input("Scanner", key=f"cam_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
         if img_file:
             img = Image.open(img_file).convert("RGB")
@@ -208,9 +184,8 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
             prediction = model.predict(data, verbose=0)
             index = np.argmax(prediction)
             label = labels[index].lower()
-            score = prediction[0][index]
             
-            if "handy" in label and score > 0.7:
+            if "handy" in label and prediction[0][index] > 0.7:
                 st.session_state.bg_color = "#ba4949"
                 play_alarm()
                 st.error("🚨 HANDY!")
@@ -219,9 +194,9 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
                 stop_alarm()
                 st.success("✅ FOKUS")
             
-            # WICHTIG: Key erhöhen und kurze Pause, damit Streamlit den Slot "leert"
+            # WICHTIG: Erhöhe den Key, schlafe kurz und starte neu, um das Bild zu löschen
             st.session_state.cam_key += 1
-            time.sleep(1.0)
+            time.sleep(1) 
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
