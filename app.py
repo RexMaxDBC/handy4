@@ -80,7 +80,7 @@ st.markdown(f"""
         display: flex; justify-content: center; padding: 15px; margin-bottom: 30px;
     }}
     .title-text {{ color: white; font-weight: bold; font-size: 2.2rem; margin: 0; }}
-    .timer-text {{ text-align: center; font-size: 120px; color: white; font-weight: bold; margin: 10px 0; }}
+    .timer-text {{ text-align: center; font-size: 110px; color: white; font-weight: bold; margin: 10px 0; }}
     
     .active-task-box {{
         background: rgba(255, 255, 255, 0.35); border: 3px solid white;
@@ -115,7 +115,7 @@ with m_col3:
         st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Lange Pause", 15*60, "#457b9d"
         st.session_state.active = False
 
-# --- TIMER LOGIK ---
+# --- TIMER ---
 if st.session_state.active:
     now = time.time()
     st.session_state.remaining_sec -= (now - st.session_state.last_tick)
@@ -139,9 +139,8 @@ with btn_center:
             stop_alarm()
         st.rerun()
 
-# --- DASHBOARD & AUFGABEN ---
+# --- DASHBOARD ---
 st.markdown("<hr style='opacity: 0.2'>", unsafe_allow_html=True)
-
 if st.session_state.selected_task:
     st.markdown(f"<div style='text-align: center; color: white; margin-bottom: 10px;'>🎯 Fokus: <b>{st.session_state.selected_task}</b></div>", unsafe_allow_html=True)
     if st.button("❌ Auswahl aufheben", use_container_width=True):
@@ -172,17 +171,23 @@ if st.session_state.tasks:
             if st.session_state.selected_task == t_name: st.session_state.selected_task = None
             st.rerun()
 
-# --- KI WÄCHTER (FLÜSSIGERE VERSION) ---
+# --- KI WÄCHTER (ULTRA STABIL) ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # Optimierter JS Trigger: Verhindert Mehrfach-Klicks und Stau
+    # 1. JS Trigger, der erst prüft, ob das alte Foto weg ist, bevor er neu klickt
     trigger_js = """
     <script>
     if(!window.photoInterval) {
         window.photoInterval = setInterval(() => {
-            const btn = Array.from(window.parent.document.querySelectorAll('button'))
-                        .find(x => x.innerText.includes('Take Photo'));
-            if(btn) btn.click();
-        }, 4000); 
+            const clearBtn = Array.from(window.parent.document.querySelectorAll('button'))
+                             .find(x => x.innerText.includes('Clear Photo'));
+            if(clearBtn) {
+                clearBtn.click(); // Erst altes Foto löschen
+            } else {
+                const takeBtn = Array.from(window.parent.document.querySelectorAll('button'))
+                                .find(x => x.innerText.includes('Take Photo'));
+                if(takeBtn) takeBtn.click(); // Dann neues Foto machen
+            }
+        }, 5000); 
     }
     </script>
     """
@@ -191,11 +196,9 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
-        # Camera Input ohne Label für sauberes UI
         img_file = st.camera_input("Scanner", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
         if img_file:
-            # Bildverarbeitung
             img = Image.open(img_file).convert("RGB")
             img = ImageOps.fit(img, (224, 224), Image.Resampling.LANCZOS)
             img_array = np.asarray(img).astype(np.float32) / 127.5 - 1
@@ -207,7 +210,7 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
             label = labels[index].lower()
             score = prediction[0][index]
             
-            if "handy" in label and score > 0.75:
+            if "handy" in label and score > 0.7:
                 st.session_state.bg_color = "#ba4949"
                 play_alarm()
                 st.error("🚨 HANDY!")
@@ -216,13 +219,12 @@ if st.session_state.active and st.session_state.mode == "Pomodoro":
                 stop_alarm()
                 st.success("✅ FOKUS")
             
-            # Key-Wechsel für neuen Kamera-Slot (Resetet den Stream sauber)
+            # WICHTIG: Key erhöhen und kurze Pause, damit Streamlit den Slot "leert"
             st.session_state.cam_key += 1
-            time.sleep(0.3)
+            time.sleep(1.0)
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Hintergrund-Refresh für den Timer
 if st.session_state.active:
     time.sleep(0.1)
     st.rerun()
