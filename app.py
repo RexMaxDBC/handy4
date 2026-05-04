@@ -62,11 +62,7 @@ def stop_alarm():
     stop_js = """
         <script>
         var audio = window.parent.document.getElementById("alarm_sound");
-        if (audio) {{
-            audio.pause();
-            audio.currentTime = 0;
-            audio.remove();
-        }}
+        if (audio) { audio.pause(); audio.currentTime = 0; audio.remove(); }
         </script>
         """
     components.html(stop_js, height=0)
@@ -141,10 +137,9 @@ with btn_center:
         st.session_state.last_tick = time.time()
         if not st.session_state.active: 
             stop_alarm()
-            st.session_state.bg_color = "#2d5a27" if st.session_state.mode == "Pomodoro" else "#457b9d"
         st.rerun()
 
-# --- DASHBOARD ---
+# --- DASHBOARD & AUFGABEN ---
 st.markdown("<hr style='opacity: 0.2'>", unsafe_allow_html=True)
 
 if st.session_state.selected_task:
@@ -152,14 +147,12 @@ if st.session_state.selected_task:
     if st.button("❌ Auswahl aufheben", use_container_width=True):
         st.session_state.selected_task = None
         st.rerun()
-else:
-    st.markdown("<div style='text-align: center; color: white; opacity: 0.7; margin-bottom: 10px;'>✨ Freies Lernen</div>", unsafe_allow_html=True)
 
-with st.expander("➕ Neues Fach"):
+with st.expander("➕ Neues Lern-Fach hinzufügen"):
     c1, c2, c3 = st.columns([3, 1, 1])
     new_name = c1.text_input("Name")
     new_target = c2.number_input("Ziel", min_value=1, value=4)
-    if c3.button("Hinzufügen"):
+    if c3.button("Speichern"):
         if new_name:
             st.session_state.tasks[new_name] = {"done": 0, "target": new_target}
             st.rerun()
@@ -169,7 +162,7 @@ if st.session_state.tasks:
         is_active = (st.session_state.selected_task == t_name)
         css = "active-task-box" if is_active else "inactive-task-box"
         progress = min(100, int((t_data["done"] / t_data["target"]) * 100))
-        st.markdown(f"<div class='{css}'><b>{t_name}</b> | {t_data['done']}/{t_data['target']}<div style='background:rgba(0,0,0,0.2);height:8px;border-radius:4px;margin-top:8px;'><div style='background:white;width:{progress}%;height:100%;border-radius:4px;'></div></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='{css}'><b>{t_name}</b> | {t_data['done']}/{t_data['target']} Sessions<br><div style='background:rgba(0,0,0,0.2);height:8px;border-radius:4px;margin-top:8px;'><div style='background:white;width:{progress}%;height:100%;border-radius:4px;'></div></div></div>", unsafe_allow_html=True)
         cs, cd, _ = st.columns([0.25, 0.25, 0.5])
         if not is_active and cs.button("Start", key=f"s_{t_name}"):
             st.session_state.selected_task = t_name
@@ -179,63 +172,57 @@ if st.session_state.tasks:
             if st.session_state.selected_task == t_name: st.session_state.selected_task = None
             st.rerun()
 
-# --- KI WÄCHTER (OPTIMIERT FÜR FLÜSSIGEN SCAN) ---
+# --- KI WÄCHTER (FLÜSSIGERE VERSION) ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # JavaScript: Findet den Button, klickt ihn, und löscht das alte Bild (Clear) effizienter
-    components.html("""
-        <script>
-        function triggerScan() {
-            const buttons = Array.from(window.parent.document.querySelectorAll('button'));
-            const photoBtn = buttons.find(x => x.innerText.includes('Take Photo'));
-            const clearBtn = buttons.find(x => x.innerText.includes('Clear'));
-            
-            if (photoBtn) {
-                photoBtn.click();
-            } else if (clearBtn) {
-                // Falls ein Bild da ist, kurz warten und dann löschen für neuen Scan
-                setTimeout(() => { clearBtn.click(); }, 3000);
-            }
-        }
-        if(!window.parent.scanInterval) {
-            window.parent.scanInterval = setInterval(triggerScan, 5000);
-        }
-        </script>
-    """, height=0)
+    # Optimierter JS Trigger: Verhindert Mehrfach-Klicks und Stau
+    trigger_js = """
+    <script>
+    if(!window.photoInterval) {
+        window.photoInterval = setInterval(() => {
+            const btn = Array.from(window.parent.document.querySelectorAll('button'))
+                        .find(x => x.innerText.includes('Take Photo'));
+            if(btn) btn.click();
+        }, 4000); 
+    }
+    </script>
+    """
+    components.html(trigger_js, height=0)
     
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
+        # Camera Input ohne Label für sauberes UI
         img_file = st.camera_input("Scanner", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
         if img_file:
+            # Bildverarbeitung
             img = Image.open(img_file).convert("RGB")
             img = ImageOps.fit(img, (224, 224), Image.Resampling.LANCZOS)
             img_array = np.asarray(img).astype(np.float32) / 127.5 - 1
             data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
             data[0] = img_array
             
-            prediction = model.predict(data)
+            prediction = model.predict(data, verbose=0)
             index = np.argmax(prediction)
             label = labels[index].lower()
             score = prediction[0][index]
             
             if "handy" in label and score > 0.75:
-                if st.session_state.bg_color != "#ba4949":
-                    st.session_state.bg_color = "#ba4949"
-                    play_alarm()
+                st.session_state.bg_color = "#ba4949"
+                play_alarm()
                 st.error("🚨 HANDY!")
             else:
-                if st.session_state.bg_color != "#2d5a27":
-                    st.session_state.bg_color = "#2d5a27"
-                    stop_alarm()
+                st.session_state.bg_color = "#2d5a27"
+                stop_alarm()
                 st.success("✅ FOKUS")
             
-            # Wichtig: Wir erhöhen den Key nur, wenn wirklich ein Bild da war
+            # Key-Wechsel für neuen Kamera-Slot (Resetet den Stream sauber)
             st.session_state.cam_key += 1
-            time.sleep(1) # Kleine Atempause für die Hardware
+            time.sleep(0.3)
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
+# Hintergrund-Refresh für den Timer
 if st.session_state.active:
     time.sleep(0.1)
     st.rerun()
