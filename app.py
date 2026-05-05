@@ -7,9 +7,10 @@ import os
 import base64
 import streamlit.components.v1 as components
 
-# --- KI SETUP ---
+# --- KI SETUP (Dein selbsttrainiertes Modell) ---
 @st.cache_resource
 def load_my_model():
+    # Lädt dein Teachable Machine / Keras Modell
     return tf.keras.models.load_model("keras_model.h5", compile=False)
 
 def load_labels():
@@ -41,7 +42,7 @@ if "selected_task" not in st.session_state:
 
 st.set_page_config(page_title="Pomodoro Wächter Pro", layout="centered")
 
-# --- SOUND LOGIK ---
+# --- SOUND FUNKTIONEN ---
 def play_alarm():
     if os.path.exists("batle-alarm-star-wars.mp3"):
         with open("batle-alarm-star-wars.mp3", "rb") as f:
@@ -67,16 +68,29 @@ def stop_alarm():
         """
     components.html(stop_js, height=0)
 
-# --- CSS DESIGN ---
+# --- CSS DESIGN (Vom funktionierenden Code übernommen) ---
 st.markdown(f"""
 <style>
-    .stApp {{ background-color: {st.session_state.bg_color}; transition: background-color 0.8s ease; }}
-    .header-container {{ border: 2px solid #D3D3D3; border-radius: 12px; background-color: rgba(211, 211, 211, 0.15); display: flex; justify-content: center; padding: 15px; margin-bottom: 30px; }}
+    .stApp {{ background-color: {st.session_state.bg_color}; transition: background-color 0.5s ease; }}
+    .header-container {{
+        border: 2px solid #D3D3D3; border-radius: 12px;
+        background-color: rgba(211, 211, 211, 0.15);
+        display: flex; justify-content: center; padding: 15px; margin-bottom: 30px;
+    }}
     .title-text {{ color: white; font-weight: bold; font-size: 2.2rem; margin: 0; }}
     .timer-text {{ text-align: center; font-size: 110px; color: white; font-weight: bold; margin: 10px 0; }}
-    .active-task-box {{ background: rgba(255, 255, 255, 0.35); border: 3px solid white; border-radius: 10px; padding: 20px; margin-bottom: 15px; color: white; }}
-    .inactive-task-box {{ background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; padding: 20px; margin-bottom: 15px; color: rgba(255, 255, 255, 0.8); }}
-    .fixed-bottom {{ position: fixed; bottom: 0; left: 0; width: 100%; background-color: white; padding: 15px; z-index: 1000; border-top: 1px solid #ddd; }}
+    .active-task-box {{
+        background: rgba(255, 255, 255, 0.2); border: 2px solid white;
+        border-radius: 10px; padding: 15px; margin-bottom: 10px; color: white;
+    }}
+    .inactive-task-box {{
+        background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 10px; padding: 15px; margin-bottom: 10px; color: rgba(255, 255, 255, 0.7);
+    }}
+    .fixed-bottom {{
+        position: fixed; bottom: 0; left: 0; width: 100%;
+        background-color: white; padding: 15px; z-index: 1000; border-top: 1px solid #ddd;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,7 +112,7 @@ with m_col3:
         st.session_state.mode, st.session_state.remaining_sec, st.session_state.bg_color = "Lange Pause", 15*60, "#457b9d"
         st.session_state.active = False
 
-# TIMER
+# TIMER LOGIK
 if st.session_state.active:
     now = time.time()
     st.session_state.remaining_sec -= (now - st.session_state.last_tick)
@@ -124,79 +138,71 @@ with btn_center:
 # --- TASK DASHBOARD ---
 st.markdown("<hr style='opacity: 0.2'>", unsafe_allow_html=True)
 if st.session_state.selected_task:
-    st.markdown(f"<div style='text-align: center; color: white; margin-bottom: 10px;'>🎯 Fokus: <b>{st.session_state.selected_task}</b></div>", unsafe_allow_html=True)
-    if st.button("❌ Auswahl aufheben", use_container_width=True):
+    if st.button("❌ Auswahl aufheben"):
         st.session_state.selected_task = None
         st.rerun()
 
-with st.expander("➕ Neues Lern-Fach hinzufügen"):
+with st.expander("📝 Lernfächer verwalten"):
     c1, c2, c3 = st.columns([3, 1, 1])
-    new_name = c1.text_input("Name")
-    new_target = c2.number_input("Ziel", min_value=1, value=4)
-    if c3.button("Speichern"):
-        if new_name:
-            st.session_state.tasks[new_name] = {"done": 0, "target": new_target}
+    name = c1.text_input("Fach Name")
+    target = c2.number_input("Ziel", min_value=1, value=4)
+    if c3.button("Hinzufügen"):
+        if name:
+            st.session_state.tasks[name] = {"done": 0, "target": target}
             st.rerun()
 
 if st.session_state.tasks:
     for t_name, t_data in list(st.session_state.tasks.items()):
         is_active = (st.session_state.selected_task == t_name)
         css = "active-task-box" if is_active else "inactive-task-box"
-        progress = min(100, int((t_data["done"] / t_data["target"]) * 100))
-        st.markdown(f"<div class='{css}'><b>{t_name}</b> | {t_data['done']}/{t_data['target']} Sessions<br><div style='background:rgba(0,0,0,0.2);height:8px;border-radius:4px;margin-top:8px;'><div style='background:white;width:{progress}%;height:100%;border-radius:4px;'></div></div></div>", unsafe_allow_html=True)
-        cs, cd, _ = st.columns([0.25, 0.25, 0.5])
-        if not is_active and cs.button("Start", key=f"s_{t_name}"):
-            st.session_state.selected_task = t_name
-            st.rerun()
-        if cd.button("Löschen", key=f"d_{t_name}"):
+        st.markdown(f"<div class='{css}'><b>{t_name}</b> | Erledigt: {t_data['done']}/{t_data['target']}</div>", unsafe_allow_html=True)
+        
+        b1, b2, _ = st.columns([0.2, 0.2, 0.6])
+        if not is_active:
+            if b1.button("Start", key=f"s_{t_name}"):
+                st.session_state.selected_task = t_name
+                st.rerun()
+        if b2.button("Löschen", key=f"d_{t_name}"):
             del st.session_state.tasks[t_name]
             if st.session_state.selected_task == t_name: st.session_state.selected_task = None
             st.rerun()
 
-# --- KI SCANNER (ROBUSTE VERSION) ---
+# --- KI SCANNER (ST-LOGIK IN VT-STRUKTUR) ---
 if st.session_state.active and st.session_state.mode == "Pomodoro":
-    # JS: Klickt nur, wenn kein Bild da ist. Das verhindert das Aufhängen.
-    trigger_js = """
-    <script>
-    if(!window.pInterval) {
-        window.pInterval = setInterval(() => {
-            const takeBtn = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Take Photo'));
-            if(takeBtn) takeBtn.click();
-        }, 5000);
-    }
-    </script>
-    """
-    components.html(trigger_js, height=0)
+    components.html("<script>if(!window.parent.pI) window.parent.pI = setInterval(() => { const b = Array.from(window.parent.document.querySelectorAll('button')).find(x => x.innerText.includes('Photo')); if(b) b.click(); }, 5000);</script>", height=0)
     
     st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     with c1:
-        # Einzigartiger Key pro Scan erzwingt das Leeren des alten Bildes
-        img_file = st.camera_input("Scanner", key=f"cam_{st.session_state.cam_key}", label_visibility="collapsed")
+        img_f = st.camera_input("Scanner", key=f"c_{st.session_state.cam_key}", label_visibility="collapsed")
     with c2:
-        if img_file:
-            img = Image.open(img_file).convert("RGB")
+        if img_f:
+            # Bildvorbereitung für Keras Modell
+            img = Image.open(img_f).convert("RGB")
             img = ImageOps.fit(img, (224, 224), Image.Resampling.LANCZOS)
             img_array = np.asarray(img).astype(np.float32) / 127.5 - 1
             data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
             data[0] = img_array
             
+            # Prediction
             prediction = model.predict(data, verbose=0)
             index = np.argmax(prediction)
             label = labels[index].lower()
+            score = prediction[0][index]
             
-            if "handy" in label and prediction[0][index] > 0.7:
+            # Handy-Logik (Prüft ob 'handy' im Label steht)
+            if "handy" in label and score > 0.7:
                 st.session_state.bg_color = "#ba4949"
                 play_alarm()
-                st.error("🚨 HANDY!")
+                st.error("HANDY ERKANNT!")
             else:
                 st.session_state.bg_color = "#2d5a27"
                 stop_alarm()
-                st.success("✅ FOKUS")
+                st.success("FOKUS AKTIV")
             
-            # WICHTIG: Erhöhe den Key, schlafe kurz und starte neu, um das Bild zu löschen
+            # Reset der Kamera für den nächsten Scan
             st.session_state.cam_key += 1
-            time.sleep(1) 
+            time.sleep(0.5)
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
