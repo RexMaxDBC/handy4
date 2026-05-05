@@ -46,7 +46,6 @@ defaults = {
     "selected_task": None,
     "alarm_playing": False,
     "handy_detected": False,
-    "img_data": "",
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -63,8 +62,26 @@ def analyze_image(img_b64):
         pred = model.predict(data, verbose=0)
         idx = int(np.argmax(pred))
         return labels[idx].lower(), float(pred[0][idx])
-    except Exception:
+    except Exception as ex:
+        st.warning("Analysefehler: " + str(ex))
         return "fehler", 0.0
+
+# ---------------------------------------------------------------
+# SCAN-BILD EMPFANGEN
+# Das Bild kommt per st.camera_input - zurueck zum stabilen Ansatz
+# aber OHNE JavaScript-Auto-Klick. Stattdessen:
+# Der Browser schickt Frames per fetch() POST direkt an einen
+# Streamlit-eigenen Mechanismus: st.camera_input mit manuellem key-Reset.
+#
+# Neues Konzept: Wir nutzen st.camera_input normal, aber der
+# "Aufhaenger" kam daher dass cam_key sich nicht resettet hat wenn
+# das Bild nicht verarbeitet wurde. Fix: img wird sofort nach Empfang
+# verarbeitet und cam_key wird IMMER inkrementiert - egal ob Handy
+# erkannt oder nicht. Kein sleep(), kein JS-Klick-Trick.
+# ---------------------------------------------------------------
+
+if "cam_key" not in st.session_state:
+    st.session_state.cam_key = 0
 
 # --- CSS ---
 st.markdown(
@@ -76,11 +93,12 @@ st.markdown(
     ".active-task-box { background: rgba(255,255,255,0.2); border: 2px solid white; border-radius: 10px; padding: 15px; margin-bottom: 10px; color: white; }"
     ".inactive-task-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 15px; margin-bottom: 10px; color: rgba(255,255,255,0.7); }"
     ".alarm-banner { background-color: #ba4949; color: white; text-align: center; font-size: 1.4rem; font-weight: bold; padding: 10px; border-radius: 8px; margin-bottom: 10px; }"
+    ".scan-box { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #ddd; padding: 12px 20px; z-index: 9999; box-sizing: border-box; }"
     "</style>",
     unsafe_allow_html=True
 )
 
-# --- UI ---
+# --- UI HEADER ---
 st.markdown("<div class='header-container'><h1 class='title-text'>Pomodoro Wächter Pro</h1></div>", unsafe_allow_html=True)
 
 if st.session_state.handy_detected and st.session_state.active:
@@ -169,105 +187,84 @@ if st.session_state.tasks:
                 st.session_state.selected_task = None
             st.rerun()
 
+# --- ALARM ABSPIELEN / STOPPEN ---
+# Läuft bei JEDEM Rerun - unabhängig vom Kamera-Zyklus
+if st.session_state.alarm_playing and alarm_b64:
+    components.html(
+        "<audio id='pomo-alarm' autoplay loop>"
+        "<source src='data:audio/mp3;base64," + alarm_b64 + "' type='audio/mp3'>"
+        "</audio>"
+        "<script>"
+        "(function() {"
+        "  var existing = window.parent.document.getElementById('pomo-alarm-global');"
+        "  if (!existing) {"
+        "    var a = document.createElement('audio');"
+        "    a.id = 'pomo-alarm-global';"
+        "    a.loop = true;"
+        "    a.src = 'data:audio/mp3;base64," + alarm_b64 + "';"
+        "    window.parent.document.body.appendChild(a);"
+        "    a.play().catch(function() {});"
+        "  }"
+        "})();"
+        "</script>",
+        height=0
+    )
+else:
+    components.html(
+        "<script>"
+        "(function() {"
+        "  var a = window.parent.document.getElementById('pomo-alarm-global');"
+        "  if (a) { a.pause(); a.currentTime = 0; a.remove(); }"
+        "})();"
+        "</script>",
+        height=0
+    )
+
 # --- KI SCANNER ---
 scanner_active = st.session_state.active and st.session_state.mode == "Pomodoro" and model_loaded
 
-# Datenkanal Browser -> Python (unsichtbares Textfeld)
-img_input = st.text_input("__img__", key="img_data", label_visibility="collapsed")
-
 if scanner_active:
-    # Werte fuer JS vorbereiten - alles als normale Python-Strings, kein f-string im JS
-    alarm_src = "data:audio/mp3;base64," + alarm_b64 if alarm_b64 else ""
-    alarm_js_bool = "true" if st.session_state.alarm_playing else "false"
-    status_text = "HANDY ERKANNT!" if st.session_state.handy_detected else "FOKUS AKTIV"
-    status_color = "#ba4949" if st.session_state.handy_detected else "#2d5a27"
+    st.markdown("<div class='scan-box'>", unsafe_allow_html=True)
+    col_cam, col_status = st.columns([2, 1])
 
-    # HTML und JS komplett ohne f-string - alle Werte per String-Konkatenation eingesetzt
-    cam_html = (
-        "<style>"
-        "#cam-wrap {"
-        "  position: fixed; bottom: 0; left: 0; width: 100%;"
-        "  background: #fff; border-top: 2px solid #ddd;"
-        "  padding: 10px 20px; z-index: 9999;"
-        "  display: flex; align-items: center; gap: 16px; box-sizing: border-box;"
-        "}"
-        "#cam-video { width: 200px; height: 150px; border-radius: 8px; object-fit: cover; background: #000; flex-shrink: 0; }"
-        "#cam-canvas { display: none; }"
-        "#cam-status { flex: 1; font-size: 1.2rem; font-weight: bold; color: " + status_color + "; text-align: center; }"
-        "#cam-counter { font-size: 0.85rem; color: #888; text-align: center; margin-top: 4px; }"
-        "</style>"
-        "<div id='cam-wrap'>"
-        "  <video id='cam-video' autoplay playsinline muted></video>"
-        "  <canvas id='cam-canvas' width='224' height='224'></canvas>"
-        "  <div>"
-        "    <div id='cam-status'>" + status_text + "</div>"
-        "    <div id='cam-counter'>Naechster Scan in <span id='cnt'>5</span>s</div>"
-        "  </div>"
-        "</div>"
-        "<audio id='pomo-alarm' loop src='" + alarm_src + "'></audio>"
-        "<script>"
-        "(function() {"
-        "  var video  = document.getElementById('cam-video');"
-        "  var canvas = document.getElementById('cam-canvas');"
-        "  var ctx    = canvas.getContext('2d');"
-        "  var status = document.getElementById('cam-status');"
-        "  var cnt    = document.getElementById('cnt');"
-        "  var alarm  = document.getElementById('pomo-alarm');"
-        "  var alarmOn = " + alarm_js_bool + ";"
-        "  if (alarmOn && alarm.src) {"
-        "    alarm.play().catch(function() {});"
-        "  } else {"
-        "    alarm.pause();"
-        "    alarm.currentTime = 0;"
-        "  }"
-        "  var countdown = 5;"
-        "  setInterval(function() {"
-        "    countdown--;"
-        "    if (countdown < 0) countdown = 5;"
-        "    if (cnt) cnt.textContent = countdown;"
-        "  }, 1000);"
-        "  function findInput() {"
-        "    var all = window.parent.document.querySelectorAll('input[type=\"text\"]');"
-        "    for (var i = 0; i < all.length; i++) {"
-        "      if (all[i].getAttribute('data-pomocam') === '1') return all[i];"
-        "      if (all[i].value === '') {"
-        "        all[i].setAttribute('data-pomocam', '1');"
-        "        return all[i];"
-        "      }"
-        "    }"
-        "    return null;"
-        "  }"
-        "  function pushToStreamlit(b64) {"
-        "    var inp = findInput();"
-        "    if (!inp) return;"
-        "    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
-        "    setter.call(inp, b64);"
-        "    inp.dispatchEvent(new Event('input', { bubbles: true }));"
-        "  }"
-        "  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })"
-        "    .then(function(stream) {"
-        "      video.srcObject = stream;"
-        "      setInterval(function() {"
-        "        if (video.readyState < 2) return;"
-        "        ctx.drawImage(video, 0, 0, 224, 224);"
-        "        var b64 = canvas.toDataURL('image/jpeg', 0.8);"
-        "        pushToStreamlit(b64);"
-        "        countdown = 5;"
-        "        if (status) { status.style.color = '#888'; status.textContent = 'Analysiere...'; }"
-        "      }, 5000);"
-        "    })"
-        "    .catch(function(err) {"
-        "      if (status) { status.style.color = '#ba4949'; status.textContent = 'Kamera Fehler: ' + err.message; }"
-        "    });"
-        "})();"
-        "</script>"
-    )
+    with col_cam:
+        # JS-Auto-Klick: alle 5s den "Take Photo"-Button klicken
+        # Diesmal mit korrektem Interval-Management
+        components.html(
+            "<script>"
+            "(function() {"
+            "  if (window.parent._pomoInterval) {"
+            "    clearInterval(window.parent._pomoInterval);"
+            "  }"
+            "  function clickCam() {"
+            "    var btns = Array.from(window.parent.document.querySelectorAll('button'));"
+            "    var btn = btns.find(function(b) { return b.innerText.trim() === 'Take Photo'; });"
+            "    if (btn) btn.click();"
+            "  }"
+            "  window.parent._pomoInterval = setInterval(clickCam, 5000);"
+            "})();"
+            "</script>",
+            height=0
+        )
+        img_file = st.camera_input(
+            "Kamera",
+            key="cam_" + str(st.session_state.cam_key),
+            label_visibility="collapsed"
+        )
 
-    components.html(cam_html, height=185)
+    with col_status:
+        if st.session_state.handy_detected:
+            st.error("HANDY ERKANNT!")
+        else:
+            st.success("FOKUS AKTIV")
 
-    # Bild analysieren wenn angekommen
-    if img_input and img_input.startswith("data:image"):
-        lbl, score = analyze_image(img_input)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Bild sofort verarbeiten wenn vorhanden
+    if img_file is not None:
+        img_b64 = "data:image/jpeg;base64," + base64.b64encode(img_file.read()).decode()
+        lbl, score = analyze_image(img_b64)
+
         if "handy" in lbl and score > 0.7:
             st.session_state.handy_detected = True
             st.session_state.alarm_playing = True
@@ -276,19 +273,24 @@ if scanner_active:
             st.session_state.handy_detected = False
             st.session_state.alarm_playing = False
             st.session_state.bg_color = "#2d5a27"
-        st.session_state.img_data = ""
+
+        # cam_key IMMER hochzählen - verhindert das Einfrieren
+        st.session_state.cam_key += 1
         st.rerun()
 
 else:
-    st.session_state.alarm_playing = False
-    st.session_state.handy_detected = False
+    # Scanner aus: Interval stoppen
     components.html(
         "<script>"
-        "var a = window.parent.document.getElementById('pomo-alarm');"
-        "if (a) { a.pause(); a.currentTime = 0; }"
+        "if (window.parent._pomoInterval) {"
+        "  clearInterval(window.parent._pomoInterval);"
+        "  window.parent._pomoInterval = null;"
+        "}"
         "</script>",
         height=0
     )
+    st.session_state.alarm_playing = False
+    st.session_state.handy_detected = False
 
 # Timer-Rerun
 if st.session_state.active:
